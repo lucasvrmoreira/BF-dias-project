@@ -1,12 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import LoadingScreen from './LoadingScreen';
+// Importando os nossos "carteiros" do arquivo de serviços
+import { 
+  acordarServidorRender, 
+  fetchCalcularAOR, 
+  fetchCalcularSOR, 
+  fetchCalcularVazao 
+} from '../services/api';
 
 export default function CalculadoraAeracao() {
-  const [abaAtiva, setAbaAtiva] = useState('aor');
-  const [loading, setLoading] = useState(false);
-  
+  // --- GERENCIAMENTO DE ESTADO ---
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const [isWakingUp, setIsWakingUp] = useState(!isLocalhost); 
 
+  const [abaAtiva, setAbaAtiva] = useState('aor');
+  
   const [resAOR, setResAOR] = useState(null);
   const [resSOR, setResSOR] = useState(null);
   const [resVazao, setResVazao] = useState(null);
@@ -16,104 +24,89 @@ export default function CalculadoraAeracao() {
   const [formVazao, setFormVazao] = useState({ profundidade: '' });
 
   const alphasSugeridos = {
-    sanitarios: "0.6 a 0.65", industrial: "0.5 a 0.6", curtume: "0.3 a 0.5",
+    sanitario: "0.6 a 0.65", industrial: "0.5 a 0.6", curtume: "0.3 a 0.5",
     mbbr: "0.7 a 0.8", mbr: "0.3 a 0.45", chorume: "0.20"
   };
 
+  // --- EFEITO DE INICIALIZAÇÃO (COLD START) ---
+  useEffect(() => {
+    if (isLocalhost) return;
+
+    const inicializarApp = async () => {
+      await acordarServidorRender(); // Chama a API para acordar
+      setIsWakingUp(false);          // Desliga a tela de carregamento
+    };
+
+    inicializarApp();
+  }, [isLocalhost]);
+
+
+  // --- HANDLERS SUPER LIMPOS ---
   const handleAOR = async (e) => {
     e.preventDefault();
-    if (!isLocalhost) setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/calcular-aor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          vazao: parseFloat(formAOR.vazao), 
-          dbo_entrada: parseFloat(formAOR.dbo_entrada), 
-          nitrogenio: parseFloat(formAOR.nitrogenio), 
-          fator_o2_dbo: parseFloat(formAOR.fator_o2_dbo) 
-        }),
+      const data = await fetchCalcularAOR({
+        vazao: parseFloat(formAOR.vazao), 
+        dbo_entrada: parseFloat(formAOR.dbo_entrada), 
+        nitrogenio: parseFloat(formAOR.nitrogenio), 
+        fator_o2_dbo: parseFloat(formAOR.fator_o2_dbo)
       });
-      const data = await response.json();
       setResAOR(data);
       setAbaAtiva('sor');
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      alert("Erro ao conectar com o servidor para calcular AOR.");
     }
   };
 
   const handleSOR = async (e) => {
     e.preventDefault();
-    if (!isLocalhost) setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/calcular-sor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          aor_total: resAOR.aor_total_kg_dia, 
-          alpha: parseFloat(formSOR.alpha), 
-          beta: parseFloat(formSOR.beta) 
-        }),
+      const data = await fetchCalcularSOR({
+        aor_total: resAOR.aor_total_kg_dia, 
+        alpha: parseFloat(formSOR.alpha), 
+        beta: parseFloat(formSOR.beta)
       });
-      const data = await response.json();
       setResSOR(data);
       setAbaAtiva('vazao');
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      alert("Erro ao conectar com o servidor para calcular SOR.");
     }
   };
 
   const handleVazao = async (e) => {
     e.preventDefault();
-    if (!isLocalhost) setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/calcular-vazao', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          sor_h: resSOR.sor_total_kg_h, 
-          profundidade: parseFloat(formVazao.profundidade) 
-        }),
+      const data = await fetchCalcularVazao({
+        sor_h: resSOR.sor_total_kg_h, 
+        profundidade: parseFloat(formVazao.profundidade)
       });
-      const data = await response.json();
       setResVazao(data);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      alert("Erro ao conectar com o servidor para calcular a Vazão.");
     }
   };
 
+
+  // --- ESTILOS DA INTERFACE ---
   const tabStyle = (id, habilitada) => ({
-    padding: '16px 24px',
-    flex: 1,
-    cursor: habilitada ? 'pointer' : 'not-allowed',
-    border: 'none',
-    transition: 'all 0.3s ease',
+    padding: '16px 24px', flex: 1, cursor: habilitada ? 'pointer' : 'not-allowed', border: 'none', transition: 'all 0.3s ease',
     backgroundColor: abaAtiva === id ? '#0747a6' : (habilitada ? '#f4f5f7' : '#fafbfc'),
     color: abaAtiva === id ? '#fff' : (habilitada ? '#42526e' : '#c1c7d0'),
-    fontWeight: '600',
-    fontSize: '0.9rem',
-    borderRadius: '8px 8px 0 0',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
+    fontWeight: '600', fontSize: '0.9rem', borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
     borderBottom: abaAtiva === id ? '4px solid #002147' : '1px solid #dfe1e6'
   });
 
   const inputStyle = {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '6px',
-    border: '1px solid #dfe1e6',
-    marginTop: '6px',
-    fontSize: '1rem',
-    outline: 'none',
-    transition: 'border-color 0.2s',
-    backgroundColor: '#fff'
+    width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #dfe1e6', marginTop: '6px', fontSize: '1rem', outline: 'none', transition: 'border-color 0.2s', backgroundColor: '#fff'
   };
 
-  if (loading && !isLocalhost) return <LoadingScreen mensagem="Calculando parâmetros técnicos..." />;
 
+  // --- TELA DE ESPERA INICIAL ---
+  if (isWakingUp) {
+    return <LoadingScreen mensagem="Inicializando servidor da B&F Dias no Render... (Pode levar até 50 segundos)" />;
+  }
+
+  // --- RENDERIZAÇÃO DA INTERFACE ---
   return (
     <div style={{ maxWidth: '900px', margin: '40px auto', padding: '0 20px', color: '#172b4d' }}>
       
@@ -124,7 +117,6 @@ export default function CalculadoraAeracao() {
         <p style={{ color: '#6b778c' }}>Cálculos técnicos precisos para sistemas de tratamento de efluentes</p>
       </header>
 
-      {/* NAVEGAÇÃO POR ABAS */}
       <nav style={{ display: 'flex', gap: '4px', marginBottom: '0' }}>
         <button style={tabStyle('aor', true)} onClick={() => setAbaAtiva('aor')}>
           <span>01</span> AOR (Carga Real)
@@ -137,22 +129,13 @@ export default function CalculadoraAeracao() {
         </button>
       </nav>
 
-      {/* CONTAINER PRINCIPAL */}
-      <div style={{ 
-        background: '#fff', 
-        padding: '40px', 
-        borderRadius: '0 0 12px 12px', 
-        boxShadow: '0 10px 25px rgba(0,0,0,0.05)',
-        border: '1px solid #dfe1e6',
-        borderTop: 'none'
-      }}>
+      <div style={{ background: '#fff', padding: '40px', borderRadius: '0 0 12px 12px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', border: '1px solid #dfe1e6', borderTop: 'none' }}>
         
         {/* ABA 01: AOR */}
         {abaAtiva === 'aor' && (
           <section>
             <div style={{ marginBottom: '24px', borderBottom: '1px solid #f4f5f7', paddingBottom: '16px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Parâmetros do Efluente</h3>
-              <p style={{ color: '#6b778c', fontSize: '0.9rem' }}></p>
             </div>
             <form onSubmit={handleAOR}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
@@ -169,10 +152,7 @@ export default function CalculadoraAeracao() {
                   <input type="number" step="any" value={formAOR.fator_o2_dbo} onChange={e => setFormAOR({...formAOR, fator_o2_dbo: e.target.value})} required style={inputStyle}/>
                 </label>
               </div>
-              <button type="submit" style={{ 
-                marginTop: '32px', padding: '14px', background: '#0747a6', color: '#fff', 
-                border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700', fontSize: '1rem'
-              }}>
+              <button type="submit" style={{ marginTop: '32px', padding: '14px', background: '#0747a6', color: '#fff', border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700', fontSize: '1rem' }}>
                 Calcular Carga Diária (AOR)
               </button>
             </form>
@@ -199,8 +179,7 @@ export default function CalculadoraAeracao() {
         {abaAtiva === 'sor' && (
           <section>
             <div style={{ marginBottom: '24px', borderBottom: '1px solid #f4f5f7', paddingBottom: '16px' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Fatores</h3>
-              <p style={{ color: '#6b778c', fontSize: '0.9rem' }}></p>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Fatores de Correção</h3>
             </div>
             <form onSubmit={handleSOR}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
@@ -216,10 +195,7 @@ export default function CalculadoraAeracao() {
                   <input type="number" step="0.01" value={formSOR.beta} onChange={e => setFormSOR({...formSOR, beta: e.target.value})} required style={inputStyle}/>
                 </label>
               </div>
-              <button type="submit" style={{ 
-                marginTop: '32px', padding: '14px', background: '#00875a', color: '#fff', 
-                border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700'
-              }}>
+              <button type="submit" style={{ marginTop: '32px', padding: '14px', background: '#00875a', color: '#fff', border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700' }}>
                 Converter para SOR (Standard)
               </button>
             </form>
@@ -245,16 +221,12 @@ export default function CalculadoraAeracao() {
           <section>
             <div style={{ marginBottom: '24px', borderBottom: '1px solid #f4f5f7', paddingBottom: '16px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Dimensionamento de Ar</h3>
-              <p style={{ color: '#6b778c', fontSize: '0.9rem' }}></p>
             </div>
             <form onSubmit={handleVazao}>
               <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Profundidade de Instalação dos Difusores (m)
                 <input type="number" step="0.1" value={formVazao.profundidade} onChange={e => setFormVazao({profundidade: e.target.value})} required style={inputStyle} placeholder="Ex: 4.5"/>
               </label>
-              <button type="submit" style={{ 
-                marginTop: '32px', padding: '14px', background: '#ff8b00', color: '#fff', 
-                border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700'
-              }}>
+              <button type="submit" style={{ marginTop: '32px', padding: '14px', background: '#ff8b00', color: '#fff', border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700' }}>
                 Gerar Vazão de Ar Necessária
               </button>
             </form>

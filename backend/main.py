@@ -52,6 +52,7 @@ def calcular_aor(dados: DadosAOR):
 @app.post("/calcular-sor")
 def calcular_sor(dados: DadosSOR):
     # SOR = AOR / (alpha * beta)
+    
     sor = dados.aor_total / (dados.alpha * dados.beta) #
     return {
         "sor_total_kg_dia": round(sor, 2),
@@ -61,7 +62,7 @@ def calcular_sor(dados: DadosSOR):
 @app.post("/calcular-vazao")
 def calcular_vazao(dados: DadosVazao):
     # SOTE baseado em 6.5% por metro de profundidade
-    sote = (dados.profundidade * 6.5) / 100 #
+    sote = (dados.profundidade * 6.5) / 100 
     # Vazão de Ar = SOR_h / (Densidade * %O2 * SOTE)
     vazao_ar = dados.sor_h / (1.293 * 0.232 * sote) if sote > 0 else 0 #
     return {
