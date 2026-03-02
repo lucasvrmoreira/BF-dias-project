@@ -11,74 +11,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 1. CONFIGURAÇÃO DOS PRODUTOS (CONFORME SITE) ---
-# Convertendo m3/min para m3/h (Multiplicando por 60)
-CATALOGO_BF = {
-    "circular_soldado": {
-        "nome": "Difusor Circular B&F 230mm (Soldado)",
-        "vazao_max_h": 7.2, # 0.120 * 60
-        "indicacao": "Elevada transferência de oxigênio e resistência hidrodinâmica.",
-        
-    },
-    "circular_hd": {
-        "nome": "Difusor Circular B&F HD (Rosqueado)",
-        "vazao_max_h": 9.0, # Estimado para modelo 270mm
-        "indicacao": "Conexão rosqueada com plásticos reforçados e alta resistência mecânica.",
-        
-    },
-    "tubular": {
-        "nome": "Difusor Tubular de Membrana",
-        "vazao_max_h": 10.0, # Média para modelos padrão
-        "indicacao": "Especialmente indicado para sistemas removíveis/flutuantes (Air Float®).",
-        
-    }
-}
+# Rota raiz para evitar erro 404 ao abrir o endereço no navegador
+@app.get("/")
+def home():
+    return {"status": "API de Dimensionamento Online"}
 
-class DadosProjeto(BaseModel):
-    vazao: float
-    profundidade: float
-    dbo_entrada: float
-    tipo_efluente: str # 'domestico', 'industrial', 'alimenticio', 'rio'
-
-@app.post("/calcular")
-def calcular(dados: DadosProjeto):
-    # 1. Definir Fator Alpha (Dificuldade)
-    alphas = {"domestico": 0.85, "industrial": 0.65, "alimenticio": 0.45, "rio": 0.90}
-    alpha = alphas.get(dados.tipo_efluente, 0.85)
-    
-    # 2. Cálculos de Engenharia
-    carga_dbo = (dados.vazao * dados.dbo_entrada) / 1000
-    aor = carga_dbo * 1.2 # Necessidade Real
-    sote = (dados.profundidade * 6.5) / 100 # Eficiência por metro
-    sor = aor / (alpha * 0.95) # Condição Padrão
-    
-    vazao_ar_total = sor / (1.293 * 0.232 * sote)
-    
-    # 3. Lógica de Seleção de Produto (O "Cérebro" do MVP)
-    if dados.tipo_efluente == "industrial" or dados.tipo_efluente == "alimenticio":
-        # Para casos críticos e químicos, o Tubular ou HD são melhores
-        produto = CATALOGO_BF["tubular"] if dados.profundidade > 4 else CATALOGO_BF["circular_hd"]
-    else:
-        # Para esgoto comum/doméstico, o campeão de vendas: Circular 230mm
-        produto = CATALOGO_BF["circular_soldado"]
-
-    # Cálculo de quantidade (Usando 70% da capacidade máxima para segurança)
-    capacidade_segura = produto["vazao_max_h"] * 0.7
-    quantidade = int(vazao_ar_total / capacidade_segura) + 1
-    
-    return {
-        "resultados_engenharia": {
-            "vazao_ar_total": round(vazao_ar_total, 2),
-            "eficiencia_sote": f"{round(sote*100, 1)}%",
-            "sor_kgh": round(sor, 2)
-        },
-        "solucao_bf_dias": {
-            "produto": produto["nome"],
-            "quantidade": quantidade,
-            "indicacao": produto["indicacao"],
-            
-        }
-    }
-
+# Adicione esta rota logo abaixo da rota home()
 @app.get("/health")
-def health(): return {"status": "online"}
+def health():
+    return {"status": "ok"}
+
+class DadosAOR(BaseModel):
+    vazao: float
+    dbo_entrada: float
+    nitrogenio: float
+    fator_o2_dbo: float
+
+class DadosSOR(BaseModel):
+    aor_total: float
+    alpha: float
+    beta: float = 0.9
+
+# Modelo para a Aba 3
+class DadosVazao(BaseModel):
+    sor_h: float
+    profundidade: float
+
+@app.post("/calcular-aor")
+def calcular_aor(dados: DadosAOR):
+    # Cálculo AOR conforme especificações
+    aor_dbo = (dados.vazao * dados.dbo_entrada) / 1000 * dados.fator_o2_dbo 
+    aor_nitrogenio = (dados.vazao * dados.nitrogenio) / 1000 * 4.6 
+    aor_total = aor_dbo + aor_nitrogenio #
+    return {
+        "aor_dbo_kg_dia": round(aor_dbo, 2),
+        "aor_nitrogenio_kg_dia": round(aor_nitrogenio, 2),
+        "aor_total_kg_dia": round(aor_total, 2)
+    }
+
+@app.post("/calcular-sor")
+def calcular_sor(dados: DadosSOR):
+    # SOR = AOR / (alpha * beta)
+    sor = dados.aor_total / (dados.alpha * dados.beta) #
+    return {
+        "sor_total_kg_dia": round(sor, 2),
+        "sor_total_kg_h": round(sor / 24, 2) #
+    }
+
+@app.post("/calcular-vazao")
+def calcular_vazao(dados: DadosVazao):
+    # SOTE baseado em 6.5% por metro de profundidade
+    sote = (dados.profundidade * 6.5) / 100 #
+    # Vazão de Ar = SOR_h / (Densidade * %O2 * SOTE)
+    vazao_ar = dados.sor_h / (1.293 * 0.232 * sote) if sote > 0 else 0 #
+    return {
+        "vazao_ar_m3h": round(vazao_ar, 2),
+        "sote_percentual": f"{round(sote * 100, 2)}%"
+    }   
+    
+    
+    

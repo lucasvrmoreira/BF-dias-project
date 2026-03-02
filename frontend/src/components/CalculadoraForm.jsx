@@ -1,188 +1,275 @@
-import { useState } from "react";
-import axios from "axios";
+import React, { useState } from 'react';
+import LoadingScreen from './LoadingScreen';
 
-const CalculadoraForm = () => {
-  const [formData, setFormData] = useState({
-    vazao: "",
-    profundidade: "",
-    dbo_entrada: "300",
-    tipo_efluente: "domestico", 
-  });
-
-  const [resultado, setResultado] = useState(null);
+export default function CalculadoraAeracao() {
+  const [abaAtiva, setAbaAtiva] = useState('aor');
   const [loading, setLoading] = useState(false);
+  
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-  const handleCalcular = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/calcular`,
-        formData,
-      );
-      setResultado(response.data);
-    } catch (error) {
-      console.error("Erro ao calcular:", error);
-      alert("Erro ao conectar com a API da BF Dias.");
-    }
-    setLoading(false);
+  const [resAOR, setResAOR] = useState(null);
+  const [resSOR, setResSOR] = useState(null);
+  const [resVazao, setResVazao] = useState(null);
+
+  const [formAOR, setFormAOR] = useState({ vazao: '', dbo_entrada: '', nitrogenio: '', fator_o2_dbo: '1.5' });
+  const [formSOR, setFormSOR] = useState({ alpha: '', beta: '0.9', segmento: 'sanitario' });
+  const [formVazao, setFormVazao] = useState({ profundidade: '' });
+
+  const alphasSugeridos = {
+    sanitarios: "0.6 a 0.65", industrial: "0.5 a 0.6", curtume: "0.3 a 0.5",
+    mbbr: "0.7 a 0.8", mbr: "0.3 a 0.45", chorume: "0.20"
   };
 
+  const handleAOR = async (e) => {
+    e.preventDefault();
+    if (!isLocalhost) setLoading(true);
+    try {
+      const response = await fetch('http://localhost:8000/calcular-aor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          vazao: parseFloat(formAOR.vazao), 
+          dbo_entrada: parseFloat(formAOR.dbo_entrada), 
+          nitrogenio: parseFloat(formAOR.nitrogenio), 
+          fator_o2_dbo: parseFloat(formAOR.fator_o2_dbo) 
+        }),
+      });
+      const data = await response.json();
+      setResAOR(data);
+      setAbaAtiva('sor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSOR = async (e) => {
+    e.preventDefault();
+    if (!isLocalhost) setLoading(true);
+    try {
+      const response = await fetch('http://localhost:8000/calcular-sor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          aor_total: resAOR.aor_total_kg_dia, 
+          alpha: parseFloat(formSOR.alpha), 
+          beta: parseFloat(formSOR.beta) 
+        }),
+      });
+      const data = await response.json();
+      setResSOR(data);
+      setAbaAtiva('vazao');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVazao = async (e) => {
+    e.preventDefault();
+    if (!isLocalhost) setLoading(true);
+    try {
+      const response = await fetch('http://localhost:8000/calcular-vazao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          sor_h: resSOR.sor_total_kg_h, 
+          profundidade: parseFloat(formVazao.profundidade) 
+        }),
+      });
+      const data = await response.json();
+      setResVazao(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const tabStyle = (id, habilitada) => ({
+    padding: '16px 24px',
+    flex: 1,
+    cursor: habilitada ? 'pointer' : 'not-allowed',
+    border: 'none',
+    transition: 'all 0.3s ease',
+    backgroundColor: abaAtiva === id ? '#0747a6' : (habilitada ? '#f4f5f7' : '#fafbfc'),
+    color: abaAtiva === id ? '#fff' : (habilitada ? '#42526e' : '#c1c7d0'),
+    fontWeight: '600',
+    fontSize: '0.9rem',
+    borderRadius: '8px 8px 0 0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    borderBottom: abaAtiva === id ? '4px solid #002147' : '1px solid #dfe1e6'
+  });
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px',
+    borderRadius: '6px',
+    border: '1px solid #dfe1e6',
+    marginTop: '6px',
+    fontSize: '1rem',
+    outline: 'none',
+    transition: 'border-color 0.2s',
+    backgroundColor: '#fff'
+  };
+
+  if (loading && !isLocalhost) return <LoadingScreen mensagem="Calculando parâmetros técnicos..." />;
+
   return (
-    <div className="max-w-6xl mx-auto py-12 px-6 animate-fade-in">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {/* COLUNA DO FORMULÁRIO */}
-        <div className="lg:col-span-5 bg-white shadow-2xl rounded-3xl p-8 border border-slate-100">
-          <div className="mb-8">
-            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-              Dimensionamento Técnico
-            </h2>
-            <p className="text-slate-500 text-sm mt-1">
-              Configure os parâmetros do sistema de aeração.
-            </p>
-          </div>
+    <div style={{ maxWidth: '900px', margin: '40px auto', padding: '0 20px', color: '#172b4d' }}>
+      
+      <header style={{ marginBottom: '32px', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: '800', color: '#0747a6', marginBottom: '8px' }}>
+          Dimensionamento de Aeração
+        </h1>
+        <p style={{ color: '#6b778c' }}>Cálculos técnicos precisos para sistemas de tratamento de efluentes</p>
+      </header>
 
-          <form onSubmit={handleCalcular} className="space-y-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                Vazão do Efluente (m³/h)
-              </label>
-              <input
-                type="number"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300"
-                value={formData.vazao}
-                onChange={(e) =>
-                  setFormData({ ...formData, vazao: e.target.value })
-                }
-                placeholder="Ex: 150"
-                required
-              />
+      {/* NAVEGAÇÃO POR ABAS */}
+      <nav style={{ display: 'flex', gap: '4px', marginBottom: '0' }}>
+        <button style={tabStyle('aor', true)} onClick={() => setAbaAtiva('aor')}>
+          <span>01</span> AOR (Carga Real)
+        </button>
+        <button style={tabStyle('sor', !!resAOR)} onClick={() => resAOR && setAbaAtiva('sor')}>
+          <span>02</span> SOR (Condição Padrão)
+        </button>
+        <button style={tabStyle('vazao', !!resSOR)} onClick={() => resSOR && setAbaAtiva('vazao')}>
+          <span>03</span> Vazão de Ar Final
+        </button>
+      </nav>
+
+      {/* CONTAINER PRINCIPAL */}
+      <div style={{ 
+        background: '#fff', 
+        padding: '40px', 
+        borderRadius: '0 0 12px 12px', 
+        boxShadow: '0 10px 25px rgba(0,0,0,0.05)',
+        border: '1px solid #dfe1e6',
+        borderTop: 'none'
+      }}>
+        
+        {/* ABA 01: AOR */}
+        {abaAtiva === 'aor' && (
+          <section>
+            <div style={{ marginBottom: '24px', borderBottom: '1px solid #f4f5f7', paddingBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Parâmetros do Efluente</h3>
+              <p style={{ color: '#6b778c', fontSize: '0.9rem' }}></p>
             </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Lâmina d'água (m)
+            <form onSubmit={handleAOR}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Vazão do Projeto (m³/dia)
+                  <input type="number" step="any" value={formAOR.vazao} onChange={e => setFormAOR({...formAOR, vazao: e.target.value})} required style={inputStyle} placeholder="Ex: 5000"/>
                 </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={formData.profundidade}
-                  onChange={(e) =>
-                    setFormData({ ...formData, profundidade: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  DBO Entrada (mg/L)
+                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>DBO de Entrada (mg/L)
+                  <input type="number" step="any" value={formAOR.dbo_entrada} onChange={e => setFormAOR({...formAOR, dbo_entrada: e.target.value})} required style={inputStyle} placeholder="Ex: 300"/>
                 </label>
-                <input
-                  type="number"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={formData.dbo_entrada}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dbo_entrada: e.target.value })
-                  }
-                />
+                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Nitrogênio (mg/L)
+                  <input type="number" step="any" value={formAOR.nitrogenio} onChange={e => setFormAOR({...formAOR, nitrogenio: e.target.value})} required style={inputStyle} placeholder="Ex: 40"/>
+                </label>
+                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Fator O₂
+                  <input type="number" step="any" value={formAOR.fator_o2_dbo} onChange={e => setFormAOR({...formAOR, fator_o2_dbo: e.target.value})} required style={inputStyle}/>
+                </label>
               </div>
-            </div>
+              <button type="submit" style={{ 
+                marginTop: '32px', padding: '14px', background: '#0747a6', color: '#fff', 
+                border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700', fontSize: '1rem'
+              }}>
+                Calcular Carga Diária (AOR)
+              </button>
+            </form>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                Segmento / Tipo de Efluente
-              </label>
-              <select
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
-                value={formData.tipo_efluente}
-                onChange={(e) =>
-                  setFormData({ ...formData, tipo_efluente: e.target.value })
-                }
-              >
-                <option value="domestico">Esgoto Doméstico</option>
-                <option value="industrial">Indústria Geral / Químico</option>
-                <option value="alimenticio">Alimentício / Laticínios</option>
-                <option value="rio">Recuperação de Corpos Hídricos</option>
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 transition-all transform active:scale-[0.98]"
-            >
-              {loading ? "Calculando..." : "Gerar Solução BF Dias"}
-            </button>
-          </form>
-        </div>
-
-        {/* COLUNA DO RESULTADO */}
-        <div className="lg:col-span-7">
-          {resultado ? (
-            <div className="bg-white shadow-2xl rounded-3xl overflow-hidden border border-slate-100 animate-slide-up">
-              <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-8 text-white">
-                <span className="bg-blue-400/30 text-white text-[10px] font-black px-2 py-1 rounded uppercase tracking-widest">
-                  Recomendação Oficial
-                </span>
-                <h3 className="text-3xl font-black mt-2 leading-tight">
-                  {resultado.solucao_bf_dias.produto}
-                </h3>
-              </div>
-
-              <div className="p-8">
-                <div className="flex flex-col sm:flex-row items-center gap-8 mb-10">
-                  <div className="bg-blue-50 p-8 rounded-[2.5rem] border border-blue-100 text-center min-w-[160px]">
-                    <span className="block text-5xl font-black text-blue-600 tracking-tighter">
-                      {resultado.solucao_bf_dias.quantidade}
-                    </span>
-                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">
-                      Unidades
-                    </span>
+            {resAOR && (
+              <div style={{ marginTop: '32px', padding: '24px', background: '#ebf2ff', borderRadius: '8px', border: '1px solid #cce0ff' }}>
+                <h4 style={{ color: '#002147', marginTop: 0, marginBottom: '16px', fontSize: '1rem', fontWeight: '700' }}>Relatório de Carga Gerada:</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '0.85rem', color: '#42526e' }}>AOR Total Calculado</span>
+                    <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0747a6' }}>{resAOR.aor_total_kg_dia} <small style={{ fontSize: '0.8rem' }}>kg O₂/dia</small></div>
                   </div>
-                  <div className="text-center sm:text-left">
-                    <p className="text-slate-500 text-base leading-relaxed italic">
-                      "{resultado.solucao_bf_dias.indicacao}"
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6 mb-10">
-                  <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                    <span className="block text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">
-                      Eficiência SOTE
-                    </span>
-                    <span className="text-xl font-bold text-slate-800">
-                      {resultado.resultados_engenharia.eficiencia_sote}
-                    </span>
-                  </div>
-                  <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                    <span className="block text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">
-                      Ar Requerido
-                    </span>
-                    <span className="text-xl font-bold text-slate-800">
-                      {resultado.resultados_engenharia.vazao_ar_total} m³/h
-                    </span>
+                  <div style={{ textAlign: 'right', fontSize: '0.85rem', color: '#42526e' }}>
+                    <div>DBO: {resAOR.aor_dbo_kg_dia} kg/dia</div>
+                    <div>N-NH₄: {resAOR.aor_nitrogenio_kg_dia} kg/dia</div>
                   </div>
                 </div>
               </div>
+            )}
+          </section>
+        )}
+
+        {/* ABA 02: SOR */}
+        {abaAtiva === 'sor' && (
+          <section>
+            <div style={{ marginBottom: '24px', borderBottom: '1px solid #f4f5f7', paddingBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Fatores</h3>
+              <p style={{ color: '#6b778c', fontSize: '0.9rem' }}></p>
             </div>
-          ) : (
-            <div className="h-full min-h-[500px] border-4 border-dashed border-slate-100 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 p-12 text-center">
-              <div className="mb-6 bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center text-4xl animate-bounce">
-                🚀
+            <form onSubmit={handleSOR}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Segmento Industrial
+                  <select value={formSOR.segmento} onChange={e => setFormSOR({...formSOR, segmento: e.target.value})} style={inputStyle}>
+                    {Object.keys(alphasSugeridos).map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                  </select>
+                </label>
+                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Fator Alpha (α) - Ref: {alphasSugeridos[formSOR.segmento]}
+                  <input type="number" step="0.01" value={formSOR.alpha} onChange={e => setFormSOR({...formSOR, alpha: e.target.value})} required style={inputStyle}/>
+                </label>
+                <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Fator Beta (β)
+                  <input type="number" step="0.01" value={formSOR.beta} onChange={e => setFormSOR({...formSOR, beta: e.target.value})} required style={inputStyle}/>
+                </label>
               </div>
-              <p className="max-w-xs text-lg font-bold text-slate-400">
-                Aguardando parâmetros para iniciar o cálculo de
-                dimensionamento...
-              </p>
+              <button type="submit" style={{ 
+                marginTop: '32px', padding: '14px', background: '#00875a', color: '#fff', 
+                border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700'
+              }}>
+                Converter para SOR (Standard)
+              </button>
+            </form>
+            {resSOR && (
+              <div style={{ marginTop: '32px', padding: '24px', background: '#e3fcef', borderRadius: '8px', border: '1px solid #abf5d1' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div>
+                    <span style={{ fontSize: '0.85rem', color: '#006644' }}>SOR Diário</span>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#006644' }}>{resSOR.sor_total_kg_dia} <small>kg/dia</small></div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.85rem', color: '#006644' }}>Demanda por Hora</span>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#006644' }}>{resSOR.sor_total_kg_h} <small>kg O₂/h</small></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ABA 03: VAZÃO */}
+        {abaAtiva === 'vazao' && (
+          <section>
+            <div style={{ marginBottom: '24px', borderBottom: '1px solid #f4f5f7', paddingBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Dimensionamento de Ar</h3>
+              <p style={{ color: '#6b778c', fontSize: '0.9rem' }}></p>
             </div>
-          )}
-        </div>
-      </div>
+            <form onSubmit={handleVazao}>
+              <label style={{ fontWeight: '600', fontSize: '0.85rem' }}>Profundidade de Instalação dos Difusores (m)
+                <input type="number" step="0.1" value={formVazao.profundidade} onChange={e => setFormVazao({profundidade: e.target.value})} required style={inputStyle} placeholder="Ex: 4.5"/>
+              </label>
+              <button type="submit" style={{ 
+                marginTop: '32px', padding: '14px', background: '#ff8b00', color: '#fff', 
+                border: 'none', width: '100%', cursor: 'pointer', borderRadius: '6px', fontWeight: '700'
+              }}>
+                Gerar Vazão de Ar Necessária
+              </button>
+            </form>
+            {resVazao && (
+              <div style={{ marginTop: '32px', padding: '30px', background: '#fff7e6', borderRadius: '12px', border: '2px solid #ffab00', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.9rem', color: '#855100', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>Vazão de Ar Requerida</span>
+                <div style={{ fontSize: '3rem', fontWeight: '900', color: '#ff8b00', margin: '8px 0' }}>
+                  {resVazao.vazao_ar_m3h} <small style={{ fontSize: '1rem' }}>m³/h</small>
+                </div>
+                <div style={{ color: '#855100', fontWeight: '600' }}>Eficiência de Transferência (SOTE): {resVazao.sote_percentual}</div>
+              </div>
+            )}
+          </section>
+        )}
+      </div>  
     </div>
   );
-};
-
-export default CalculadoraForm;
+}
