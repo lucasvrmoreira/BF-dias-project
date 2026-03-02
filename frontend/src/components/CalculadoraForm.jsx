@@ -103,7 +103,7 @@ export default function CalculadoraAeracao() {
 
   // --- TELA DE ESPERA INICIAL ---
   if (isWakingUp) {
-    return <LoadingScreen mensagem="Inicializando servidor da B&F Dias no Render... (Pode levar até 50 segundos)" />;
+    return <LoadingScreen mensagem="Inicializando servidor..." />;
   }
 
   // --- RENDERIZAÇÃO DA INTERFACE ---
